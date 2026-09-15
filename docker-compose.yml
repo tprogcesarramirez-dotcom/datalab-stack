@@ -1,0 +1,89 @@
+services:
+
+  postgres:
+    image: postgres:16.4-alpine
+    container_name: datalab-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d/sql
+    networks:
+      - datalab-network
+
+  pgadmin:
+    image: dpage/pgadmin4:8.11
+    container_name: datalab-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - datalab-network
+
+  jupyter:
+    image: jupyter/scipy-notebook:latest
+    container_name: datalab-jupyter
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    environment:
+      JUPYTER_ENABLE_LAB: "yes"
+      DOCKER_STACKS_JUPYTER_CMD: "lab --ServerApp.token=''"
+    volumes:
+      - ./notebooks:/home/jovyan/work/notebooks
+      - ./data:/home/jovyan/work/data
+      - ./src:/home/jovyan/work/src
+      - ./sql:/home/jovyan/work/sql
+      - ./models:/home/jovyan/work/models
+      - ./requirements.txt:/home/jovyan/work/requirements.txt
+    depends_on:
+      - postgres
+    networks:
+      - datalab-network
+
+  vscode-web:
+    image: codercom/code-server:4.92.2
+    container_name: datalab-vscode
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - .:/home/coder/project
+    networks:
+      - datalab-network
+
+  streamlit:
+    image: jupyter/scipy-notebook:latest
+    container_name: datalab-streamlit
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    working_dir: /home/jovyan/work
+    command: >
+      sh -c "pip install -r /home/jovyan/work/requirements.txt &&
+            streamlit run apps/streamlit/app.py --server.port=8501 --server.address=0.0.0.0"
+    volumes:
+      - .:/home/jovyan/work
+    depends_on:
+      - postgres
+    networks:
+      - datalab-network
+
+networks:
+  datalab-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
